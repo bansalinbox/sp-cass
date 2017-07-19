@@ -12,3 +12,5 @@
 <samples.MySpecTest-stats timestamp="1500404940267"><stats time="16" expectations="3" successes="3" examples="3"></stats></samples.MySpecTest-stats>
 <samples.MySpecTest-stats timestamp="1500405195938"><stats time="16" expectations="3" successes="3" examples="3"></stats></samples.MySpecTest-stats>
 <samples.MySpecTest-stats timestamp="1500406016884"><stats time="14" expectations="3" successes="3" examples="3"></stats></samples.MySpecTest-stats>
+<samples.MySpecTest-stats timestamp="1500474414695"><stats time="18" expectations="3" successes="3" examples="3"></stats></samples.MySpecTest-stats>
+<samples.MySpecTest-stats timestamp="1500474455365"><stats time="14" expectations="3" successes="3" examples="3"></stats></samples.MySpecTest-stats>
