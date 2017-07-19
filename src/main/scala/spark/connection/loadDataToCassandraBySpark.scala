@@ -55,6 +55,11 @@ class loadDataToCassandraBySpark {
     executeCassndraCQl(sc, newTableCQl)
     val cassandraRDD = sc.cassandraTable(keySpace, tableName).select("caseid", "year", "age", "gender", "race").where("age > 10")
 
+    cassandraRDD.saveToCassandra(keySpace, newTableName)
+    
+    
+    
+
    // val temp = cassandraRDD.collect().foreach { x => println(x) }
 
   }
