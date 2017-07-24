@@ -5,7 +5,7 @@ import com.typesafe.config.ConfigFactory
 
  object SparkContext {
 
-  def context(): org.apache.spark.SparkContext = {
+  def session(): org.apache.spark.sql.SparkSession = {
     val configFile = ConfigFactory.load()
     val cassandraHost = configFile.getString("cassandraHost")
     val sparkMemory = configFile.getString("sparkMemory")
@@ -19,7 +19,7 @@ import com.typesafe.config.ConfigFactory
       .config("start_native_transport", "true")
       .getOrCreate()
     
-    return sparkSession.sparkContext
+    return sparkSession
 
   }
 }

@@ -1,0 +1,1 @@
+create TABLE IF NOT EXISTS {{keySpaceNameVar}}.{{tableNameVar}} (race bigint primary key ,race_type text)

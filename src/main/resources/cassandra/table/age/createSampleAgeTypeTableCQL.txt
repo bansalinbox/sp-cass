@@ -1,0 +1,1 @@
+create TABLE IF NOT EXISTS {{keySpaceNameVar}}.{{tableNameVar}} (age bigint primary key ,age_type text, count bigint, percent float)

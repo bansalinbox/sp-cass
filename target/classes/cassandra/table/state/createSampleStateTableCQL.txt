@@ -1,0 +1,1 @@
+create TABLE IF NOT EXISTS {{keySpaceNameVar}}.{{tableNameVar}} (stfips bigint primary key ,state text, count bigint, percent float)

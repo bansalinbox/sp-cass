@@ -1,6 +1,10 @@
 package spark.connection
 
 import collection.mutable.HashMap
+import com.datastax.spark.connector._
+import com.datastax.spark.connector.cql.CassandraConnector
+import com.datastax.spark.connector.cql.CassandraConnectorConf
+import com.datastax.spark.connector.rdd.ReadConf
 
 object Utils {
 
@@ -14,6 +18,13 @@ object Utils {
 
   def replaceString(str: String, to: String, value: String): String = {
     str.replace(to, value)
+  }
+
+  def executeCassndraCQl(sc: org.apache.spark.SparkContext, cqlString: String): Unit = {
+    println("Going to execute sql -->" + cqlString)
+    CassandraConnector(sc).withSessionDo { session =>
+      session.execute(cqlString)
+    }
   }
 
 }

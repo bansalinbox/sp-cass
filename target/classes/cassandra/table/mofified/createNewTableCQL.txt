@@ -1,1 +1,0 @@
-create TABLE IF NOT EXISTS {{keySpaceNameVar}}.{{newTableNameVar}} (CASEID bigint primary key,YEAR bigint ,AGE bigint ,GENDER bigint ,RACE bigint)
