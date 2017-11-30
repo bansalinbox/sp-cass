@@ -1,0 +1,60 @@
+/* * Copyright (c) 2017, Anthem Inc. All rights reserved. * DO NOT ALTER OR REMOVE THIS FILE HEADER. * */
+package com.anthem.csbd.pi.dao
+import org.apache.commons.codec.digest.DigestUtils
+import scala.collection.JavaConverters._
+import org.apache.commons.codec.digest.DigestUtils
+import org.apache.spark.sql.Rowimport org.apache.spark.rdd.PairRDDFunctions
+import org.apache.hadoop.hbase.client.Putimport org.apache.hadoop.hbase.util.Bytes
+import com.anthem.etl.util.Utilsimport com.anthem.etl.config.DataSourceConfigimport com.anthem.etl.dao.GenericDAOimport com.anthem.etl.dao.JSONHolderimport com.anthem.etl.dao.ETLStrategyimport com.anthem.etl.dao.ImportTrait
+import scala.collection.JavaConverters._
+import org.apache.avro.LogicalTypes.Decimalimport org.apache.spark.rdd.PairRDDFunctionsimport org.apache.spark.sql.Rowimport java.sql.Timestampimport scala.collection.Map
+import org.apache.spark.sql.functions._
+import com.anthem.csbd.pi.dao.Claim22/*import scala.math.BigDecimal*/import java.math.BigDecimalimport shapeless.productElements
+/** * @author T Murali * @version 1.0 * * Imports Finalized Claims and the ClaimLine information into HBase. * Illustrates how to persist a 1-N entity in HBase * */
+class ClaimDAO extends ETLStrategy with ImportTrait with Serializable {
+  override def importData(dataSrcCfg: DataSourceConfig) {    val sqlContext = getSQLContext    import sqlContext.implicits._
+    val dataSetCfg = dataSrcCfg.datasets.get(0)
+    val dataFrame = getHiveContext.sql(dataSrcCfg.queryMap.asScala(dataSetCfg.src_query))
+    //    val dataFrame1 = dataFrame.selectExpr("CAST(clcl_id As varchar(20))", "CAST(meme_ck As varchar(20))", "CAST(grgr_ck As varchar(20))", "CAST(sbsb_ck As varchar(20))", "CAST(sgsg_ck As varchar(20))", "CAST(clmf_icd_ind_proc As varchar(20))", "CAST(clcb_cob_amt As varchar(20))", "CAST(clcb_cob_allow As varchar(20))", "CAST(clhp_fac_type As varchar(20))", "CAST(clhp_bill_class As varchar(20))", "CAST(clhp_frequency As varchar(20))", "CAST(clhp_adm_typ As varchar(20))", "CAST(clhp_adm_dt As varchar(20))", "CAST(clhp_dc_stat As varchar(20))", "CAST(clvc_value As varchar(20))", "CAST(clvc_amt As varchar(20))")
+    //    val dataFrame1 = dataFrame.selectExpr("CAST(clcl_id As varchar(12))", "CAST(meme_ck As varchar(12))", "CAST(grgr_ck As varchar(12))", "CAST(sbsb_ck As varchar(12))", "CAST(sgsg_ck As varchar(12))", "CAST(clmf_icd_ind_proc As varchar(12))", "CAST(clcb_cob_amt As varchar(12))", "CAST(clcb_cob_allow As varchar(12))", "CAST(clhp_fac_type As varchar(12))", "CAST(clhp_bill_class As varchar(12))", "CAST(clhp_frequency As varchar(12))", "CAST(clhp_adm_typ As varchar(12))", "CAST(clhp_adm_dt As varchar(12))", "CAST(clhp_dc_stat As varchar(12))", "CAST(cdml_seq_no As varchar(12))", "CAST(meme_ck_cdml As varchar(12))", "CAST(clvc_value As varchar(12))", "CAST(clvc_amt As varchar(12))", "CAST(clhi_type As varchar(12))", "CAST(ipcd_id_clhi As varchar(12))", "CAST(clmd_type As varchar(12))", "CAST(idcd_id_clmd As varchar(12))")
+    val clmDataSet = dataFrame.as[Claim22]    val groupedClmDataSet = clmDataSet.groupBy($"clcl_id", $"meme_ck", $"grgr_ck", $"sbsb_ck", $"sgsg_ck",         $"clmf_icd_ind_proc", $"clcb_cob_amt", $"clcb_cob_allow",      $"clhp_fac_type", $"clhp_bill_class", $"clhp_frequency", $"clhp_adm_typ", $"clhp_adm_dt", $"clhp_dc_stat" )    // .agg(collect)
+          case 1 => clcl_id    case 2 => meme_ck    case 3 => grgr_ck    case 4 => sbsb_ck    case 5 => sgsg_ck    case 6 => clmmf    case 7 => clcb    case 8 => clhp    case 9 => cdmlall    case 10 => clvcall    case 11 => clhiall    case 12 => clmdall                      val groupedClmDataSet1 = groupedClmDataSet.mapGroups((k, iter) => {
+      import scala.collection.mutable.ArrayBuffer
+      var cdmlall = Set[ClaimLine22]()      var clvcall = Set[ClaimValue22]()      var clhiall = Set[ClaimProcedure22]()      var clmdall = Set[ClaimDiagnosis22]()
+      val clmf = new MultipleFunctions(k.getString(5))      val clcb = new ClaimCOB(k.getDecimal(6), k.getDecimal(7))      val hosp = new ClaimHospital(k.getString(8), k.getString(9), k.getString(10), k.getString(11), k.getTimestamp(12), k.getString(13))      //      val clmLine1 = iter.map(line => new ClaimLine22(new BigDecimal(line.productElement(1).toString()), new BigDecimal(line.productElement(2).toString())
+      val cdmlall1 = iter.map(line => new claiminfo(new ClaimLine22(line., new BigDecimal(line.productElement(2).toString())), new ClaimValue22(line.productElement(1).toString(), line.productElement(2).toString()), new ClaimProcedure22(line.productElement(1).toString(), line.productElement(2).toString()), new ClaimDiagnosis22(line.productElement(1).toString(), line.productElement(2).toString()))).toArray
+      for (z <- cdmlall1) {        cdmlall += z.a        clvcall += z.b        clhiall += z.c        clmdall += z.d      }
+      //  val clvcall = iter.map(value => new ClaimValue(value.clvc_value, value.clvc_amt)).toArray  
+      val clm = new Claim(k.getString(0), k.getDecimal(1), k.getDecimal(2), k.getDecimal(3), k.getDecimal(4),        clmf,        clcb,        hosp,        cdmlall.toArray,        clvcall.toArray,        clhiall.toArray,        clmdall.toArray)
+      //      cdmlall.empty      //      clvcall.empty      //      clhiall.empty      //      clmdall.empty      (k.getString(0), clm) // getString(0) i.e. clcl_id is the column for the rowkey     })
+    val columnFamily = dataSetCfg.hbase_table_columnfamily    val columnName = dataSetCfg.hbase_table_columnname    val putRDD = groupedClmDataSet1.rdd.map({      case (key, value) => {        val digest = DigestUtils.md5Hex(String.valueOf(key))        val rowKey = new StringBuilder(digest.substring(0, 8)).append(key).toString()        val holder = new JSONHolder(Utils.asJSONString(value))        val p = new Put(Bytes.toBytes(rowKey))        p.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(columnName), Utils.serialize(holder))
+        (new org.apache.hadoop.hbase.io.ImmutableBytesWritable, p)      }    })
+    val hbaseTable = dataSetCfg.hbase_schema.concat(":").concat(dataSetCfg.hbase_table_name)    new PairRDDFunctions(putRDD).saveAsNewAPIHadoopDataset(getMapReduceJobConfiguration(hbaseTable))  }
+}
+//case class ClaimRecord(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal,//  clmf_icd_ind_proc: String,//  clcb_cob_amt: BigDecimal, clcb_cob_allow: BigDecimal,//  clhp_fac_type: String, clhp_bill_class: String, clhp_frequency: String, clhp_adm_typ: String, clhp_adm_dt: Timestamp, clhp_dc_stat: String,//  clvc_value: BigDecimal, clvc_amt: BigDecimal,//  cdml_seq_no: BigDecimal, meme_ck_cdml: BigDecimal,//  clhi_type: String, ipcd_id_clhi: String,//  clmd_type: String, idcd_id_clmd: String)
+case class Claim(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal,  clmmf: MultipleFunctions, clcb: ClaimCOB, clhp: ClaimHospital, cdmlall: Array[ClaimLine22], clvcall: Array[ClaimValue22],  clhiall: Array[ClaimProcedure22], clmdall: Array[ClaimDiagnosis22])
+//case class Claim1(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal,//  clmmf: MultipleFunctions, clcb: ClaimCOB, clhp: ClaimHospital, cdmlall: Array[ClaimLine], clvcall: Array[ClaimValue],//  clhiall: Array[ClaimProcedure], clmdall: Array[ClaimDiagnosis])
+case class MultipleFunctions(clmf_icd_ind_proc: String)
+case class ClaimCOB(clcb_cob_amt: BigDecimal, clcb_cob_allow: BigDecimal)
+case class ClaimHospital(clhp_fac_type: String, clhp_bill_class: String, clhp_frequency: String, clhp_adm_typ: String,  clhp_adm_dt: Timestamp, clhp_dc_stat: String)
+//case class ClaimValue(clvc_value: BigDecimal, clvc_amt: BigDecimal)
+//case class ClaimLine(cdml_seq_no: BigDecimal, meme_ck_cdml: BigDecimal)
+case class claiminfo(a: ClaimLine22, b: ClaimValue22, c: ClaimProcedure22, d: ClaimDiagnosis22)
+//clm.clcl_cl_type,clm.clcl_cl_sub_type,clm.clcl_pre_price_ind,clm.clcl_cur_sts,clm.clcl_last_act_dtm,clm.clcl_input_dt,clm.clcl_recd_dt,clm.clcl_paid_dt,clm.clcl_low_svc_dt,clm.clcl_high_svc_dt,clm.clcl_id_adj_from,clm.clcl_id_adj_to,clm.cscs_id,clm.cspi_id,clm.pdpd_id,clm.clcl_me_age,clm.nwpe_pfx,clm.nwpr_pfx,clm.nwcr_pfx,clm.nwnw_id,clm.agag_id,clm.clcl_payee_pr_id,clm.prpr_id,
+//  clm.clcl_ntwk_ind,clm.clcl_pa_acct_no,clm.clcl_tot_chg,clm.clcl_tot_payable,clm.clcl_drag_or_ind
+//case class ClaimProcedure(clhi_type: String, ipcd_id_clhi: String)
+//case class ClaimDiagnosis(clmd_type: String, idcd_id_clmd: String)
+class ClaimDiagnosis22(clmd_type: String, idcd_id_clmd: String)    extends Product    with Serializable {  def canEqual(that: Any) = that.isInstanceOf[ClaimDiagnosis22]  def productArity = 2  def productElement(idx: Int) = idx match {    case 1 => clmd_type    case 2 => idcd_id_clmd
+  }}
+class ClaimProcedure22(clhi_type: String, ipcd_id_clhi: String)    extends Product    with Serializable {  def canEqual(that: Any) = that.isInstanceOf[ClaimProcedure22]  def productArity = 2  def productElement(idx: Int) = idx match {    case 1 => clhi_type    case 2 => ipcd_id_clhi
+  }}
+class ClaimValue22(clvc_value: String, clvc_amt: String)    extends Product    with Serializable {  def canEqual(that: Any) = that.isInstanceOf[ClaimValue22]  def productArity = 2  def productElement(idx: Int) = idx match {    case 1 => clvc_value    case 2 => clvc_amt
+  }}
+class ClaimLine22(cdml_seq_no: BigDecimal, meme_ck_cdml: BigDecimal)    extends Product    with Serializable {  def canEqual(that: Any) = that.isInstanceOf[ClaimLine22]  def productArity = 2  def productElement(idx: Int) = idx match {    case 1 => cdml_seq_no    case 2 => meme_ck_cdml
+  }}
+//class Claim22(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal,//  clmf_icd_ind_proc: String,//  clcb_cob_amt: BigDecimal, clcb_cob_allow: BigDecimal,//  clhp_fac_type: String, clhp_bill_class: String, clhp_frequency: String, clhp_adm_typ: String, clhp_adm_dt: Timestamp, clhp_dc_stat: String,//  clvc_value: BigDecimal, clvc_amt: BigDecimal,//  cdml_seq_no: BigDecimal, meme_ck_cdml: BigDecimal,//  clhi_type: String, ipcd_id_clhi: String,//  clmd_type: String, idcd_id_clmd: String)
+class Claim22(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal,  clmmf: MultipleFunctions, clcb: ClaimCOB, clhp: ClaimHospital, cdmlall: Array[ClaimLine22], clvcall: Array[ClaimValue22],  clhiall: Array[ClaimProcedure22], clmdall: Array[ClaimDiagnosis22])    extends Product
+    with Serializable {  def canEqual(that: Any) = that.isInstanceOf[Claim22]
+  def productArity = 12  def productElement(idx: Int) = idx match {    case 1 => clcl_id    case 2 => meme_ck    case 3 => grgr_ck    case 4 => sbsb_ck    case 5 => sgsg_ck    case 6 => clmmf    case 7 => clcb    case 8 => clhp    case 9 => cdmlall    case 10 => clvcall    case 11 => clhiall    case 12 => clmdall      }
+}
+
