@@ -1,0 +1,194 @@
+/*
+ * Copyright (c) 2017, Anthem Inc. All rights reserved.
+ * DO NOT ALTER OR REMOVE THIS FILE HEADER.
+ *
+ */
+
+package com.anthem.csbd.pi.dao
+
+import org.apache.commons.codec.digest.DigestUtils
+
+import scala.collection.JavaConverters._
+
+import org.apache.commons.codec.digest.DigestUtils
+
+import org.apache.spark.sql.Row
+import org.apache.spark.rdd.PairRDDFunctions
+
+import org.apache.hadoop.hbase.client.Put
+import org.apache.hadoop.hbase.util.Bytes
+
+import com.anthem.etl.util.Utils
+import com.anthem.etl.config.DataSourceConfig
+import com.anthem.etl.dao.GenericDAO
+import com.anthem.etl.dao.JSONHolder
+import com.anthem.etl.dao.ETLStrategy
+import com.anthem.etl.dao.ImportTrait
+
+import scala.collection.JavaConverters._
+
+import org.apache.avro.LogicalTypes.Decimal
+import org.apache.spark.rdd.PairRDDFunctions
+import org.apache.spark.sql.Row
+import java.sql.Timestamp
+import scala.collection.Map
+
+import org.apache.spark.sql.functions._
+
+/*import scala.math.BigDecimal*/
+import java.math.BigDecimal
+import shapeless.productElements
+
+/**
+ * @author T Murali
+ * @version 1.0
+ *
+ * Imports Finalized Claims and the ClaimLine information into HBase.
+ * Illustrates how to persist a 1-N entity in HBase
+ *
+ */
+
+class ClaimDAO extends ETLStrategy with ImportTrait with Serializable {
+
+  override def importData(dataSrcCfg: DataSourceConfig) {
+    val sqlContext = getSQLContext
+    import sqlContext.implicits._
+
+    val dataSetCfg = dataSrcCfg.datasets.get(0)
+
+    val dataFrame = getHiveContext.sql(dataSrcCfg.queryMap.asScala(dataSetCfg.src_query))
+
+    val clmDataSet = dataFrame.as[Claim22]
+    val groupedClmDataSet = clmDataSet.groupBy($"clcl_id", $"meme_ck", $"grgr_ck", $"sbsb_ck", $"sgsg_ck", $"clcl_cl_type",
+      $"clcl_cl_sub_type", $"clmf_icd_ind_proc", $"clcb_cob_amt", $"clcb_cob_allow",
+      $"clhp_fac_type", $"clhp_bill_class", $"clhp_frequency", $"clhp_adm_typ", $"clhp_adm_dt", $"clhp_dc_stat", $"clvc_value", $"clvc_amt",
+      $"cdml_seq_no", $"meme_ck_cdml", $"clhi_type", $"ipcd_id_clhi", $"clmd_type", $"idcd_id_clmd")
+    // .agg(collect)
+
+    val groupedClmDataSet1 = groupedClmDataSet.mapGroups((k, iter) => {
+
+      import scala.collection.mutable.ArrayBuffer
+
+      val clmf = new MultipleFunctions(k.getString(7))
+      val clcb = new ClaimCOB(k.getDecimal(8), k.getDecimal(9))
+      val hosp = new ClaimHospital(k.getString(10), k.getString(11), k.getString(12), k.getString(13), k.getTimestamp(14), k.getString(15))
+
+      val line = new ClaimLine(k.getDecimal(16), k.getDecimal(17))
+
+      val value = new ClaimValue(k.getDecimal(18), k.getDecimal(19))
+
+      val clhi = new ClaimProcedure(k.getString(20), k.getString(21))
+
+      val diag = new ClaimDiagnosis(k.getString(22), k.getString(23))
+
+      //      val clmLine1 = iter.map(line => new ClaimLine22(new BigDecimal(line.productIterator[].clmLine. .toString()), new BigDecimal(line.productElement(1).toString())
+
+      val clm = new Claim(k.getString(0), k.getDecimal(1), k.getDecimal(2), k.getDecimal(3), k.getDecimal(4), k.getString(5), k.getString(6),
+        clmf,
+        clcb,
+        hosp,
+        line,
+        value,
+        clhi,
+        diag)
+
+      (k.getString(0), clm) // getString(0) i.e. clcl_id is the column for the rowkey 
+    })
+
+    val columnFamily = dataSetCfg.hbase_table_columnfamily
+    val columnName = dataSetCfg.hbase_table_columnname
+    val putRDD = groupedClmDataSet1.rdd.map({
+      case (key, value) => {
+        val digest = DigestUtils.md5Hex(String.valueOf(key))
+        val rowKey = new StringBuilder(digest.substring(0, 8)).append(key).toString()
+        val holder = new JSONHolder(Utils.asJSONString(value))
+        val p = new Put(Bytes.toBytes(rowKey))
+        p.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(columnName), Utils.serialize(holder))
+
+        (new org.apache.hadoop.hbase.io.ImmutableBytesWritable, p)
+      }
+    })
+
+    val hbaseTable = dataSetCfg.hbase_schema.concat(":").concat(dataSetCfg.hbase_table_name)
+    new PairRDDFunctions(putRDD).saveAsNewAPIHadoopDataset(getMapReduceJobConfiguration(hbaseTable))
+  }
+
+}
+
+//case class ClaimRecord(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal, clcl_cl_type: String,
+//  clcl_cl_sub_type: String,
+//  clmf_icd_ind_proc: String,
+//  clcb_cob_amt: BigDecimal, clcb_cob_allow: BigDecimal,
+//  clhp_fac_type: String, clhp_bill_class: String, clhp_frequency: String, clhp_adm_typ: String, clhp_adm_dt: Timestamp, clhp_dc_stat: String,
+//  clvc_value: BigDecimal, clvc_amt: BigDecimal,
+//  cdml_seq_no: BigDecimal, meme_ck_cdml: BigDecimal,
+//  clhi_type: String, ipcd_id_clhi: String,
+//  clmd_type: String, idcd_id_clmd: String)
+
+case class Claim(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal, clcl_cl_type: String,
+  clcl_cl_sub_type: String,
+  clmmf: MultipleFunctions, clcb: ClaimCOB, clhp: ClaimHospital, cdmlall: ClaimLine, clvcall: ClaimValue,
+  clhiall: ClaimProcedure, clmdall: ClaimDiagnosis)
+
+case class MultipleFunctions(clmf_icd_ind_proc: String)
+
+case class ClaimCOB(clcb_cob_amt: BigDecimal, clcb_cob_allow: BigDecimal)
+
+case class ClaimHospital(clhp_fac_type: String, clhp_bill_class: String, clhp_frequency: String, clhp_adm_typ: String,
+  clhp_adm_dt: Timestamp, clhp_dc_stat: String)
+
+case class ClaimValue(clvc_value: BigDecimal, clvc_amt: BigDecimal)
+
+case class ClaimLine(cdml_seq_no: BigDecimal, meme_ck_cdml: BigDecimal)
+
+case class ClaimProcedure(clhi_type: String, ipcd_id_clhi: String)
+
+case class ClaimDiagnosis(clmd_type: String, idcd_id_clmd: String)
+
+class Claim22(clcl_id: String, meme_ck: BigDecimal, grgr_ck: BigDecimal, sbsb_ck: BigDecimal, sgsg_ck: BigDecimal, clcl_cl_type: String,
+  clcl_cl_sub_type: String,
+  clmf_icd_ind_proc: String,
+  clcb_cob_amt: BigDecimal, clcb_cob_allow: BigDecimal,
+  clhp_fac_type: String, clhp_bill_class: String, clhp_frequency: String, clhp_adm_typ: String, clhp_adm_dt: Timestamp, clhp_dc_stat: String,
+  clvc_value: BigDecimal, clvc_amt: BigDecimal,
+  cdml_seq_no: BigDecimal, meme_ck_cdml: BigDecimal,
+  clhi_type: String, ipcd_id_clhi: String,
+  clmd_type: String, idcd_id_clmd: String)
+
+    extends Product
+
+    with Serializable {
+  def canEqual(that: Any) = that.isInstanceOf[Claim22]
+
+  def productArity = 23
+  def productElement(idx: Int) = idx match {
+    case 0 => clcl_id
+    case 1 => meme_ck
+    case 2 => grgr_ck
+    case 3 => sbsb_ck
+    case 4 => sgsg_ck
+    case 5 => clcl_cl_type
+    case 6 => clcl_cl_sub_type
+    case 7 => clmf_icd_ind_proc
+    case 8 => clcb_cob_amt
+    case 9 => clcb_cob_allow
+    case 10 => clhp_fac_type
+    case 11 => clhp_bill_class
+    case 12 => clhp_frequency
+    case 13 => clhp_adm_typ
+    case 14 => clhp_adm_dt
+    case 15 => clhp_dc_stat
+    case 16 => clvc_value
+    case 17 => clvc_amt
+    case 18 => cdml_seq_no
+    case 19 => meme_ck_cdml
+    case 20 => clhi_type
+    case 21 => ipcd_id_clhi
+    case 22 => clmd_type
+    case 23 => idcd_id_clmd
+  }
+
+}
+
+　
+　
